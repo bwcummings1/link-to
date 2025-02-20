@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Project Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold mb-8 text-center text-gray-800">GitHub Project Analyzer</h1>
+        
+        <!-- Add Project Form -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-2xl font-semibold mb-4">Add New Project</h2>
+            <form id="addProjectForm" class="space-y-4">
+                <div class="mb-6">
+                    <label for="repo-url" class="block text-sm font-medium text-gray-700">GitHub Repository URL</label>
+                    <input type="text" id="repo-url" name="repo-url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="https://github.com/username/repository">
+                </div>
+                
+                <div class="mb-6">
+                    <label for="model-select" class="block text-sm font-medium text-gray-700">Select Model</label>
+                    <select id="model-select" name="model-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                        <option value="gpt-4-turbo-preview">GPT-4 Turbo (Recommended)</option>
+                        <option value="gpt-4">GPT-4</option>
+                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                    </select>
+                </div>
+                
+                <button type="submit" 
+                        class="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    Analyze Repository
+                </button>
+            </form>
+        </div>
+
+        <!-- Projects List -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-2xl font-semibold mb-4">Your Projects</h2>
+            <div id="projectsList" class="space-y-4">
+                <!-- Projects will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Project Details Modal -->
+        <div id="projectModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto">
+            <div class="relative mx-auto my-10 p-8 border w-4/5 max-w-4xl shadow-lg rounded-md bg-white">
+                <div class="mt-3">
+                    <h3 class="text-2xl font-bold mb-6" id="modalTitle"></h3>
+                    <div class="space-y-6 max-h-[60vh] overflow-y-auto pr-4" id="modalContent">
+                        <!-- Content will be inserted here -->
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button onclick="closeModal()" 
+                            class="bg-gray-600 text-white px-6 py-2 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load projects on page load
+        document.addEventListener('DOMContentLoaded', loadProjects);
+
+        // Handle form submission
+        document.getElementById('addProjectForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const repoUrl = document.getElementById('repo-url').value;
+            const model = document.getElementById('model-select').value;
+            
+            if (!repoUrl) {
+                alert('Please enter a GitHub repository URL');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/projects', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ repo_url: repoUrl, model: model }),
+                });
+                
+                if (!response.ok) throw new Error('Failed to add project');
+                
+                document.getElementById('repo-url').value = '';
+                await loadProjects();
+            } catch (error) {
+                alert('Error adding project: ' + error.message);
+            }
+        });
+
+        async function loadProjects() {
+            try {
+                const response = await fetch('/api/projects');
+                const projects = await response.json();
+                
+                const projectsList = document.getElementById('projectsList');
+                projectsList.innerHTML = projects.map(project => `
+                    <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <h3 class="text-xl font-semibold">${project.name}</h3>
+                        <p class="text-gray-600 mb-2">${project.description || 'No description available'}</p>
+                        <div class="flex space-x-2">
+                            <a href="${project.url}" target="_blank" 
+                               class="text-indigo-600 hover:text-indigo-800">View on GitHub</a>
+                            <button onclick="viewProject('${project.id}')"
+                                    class="text-indigo-600 hover:text-indigo-800">
+                                View Analysis
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading projects:', error);
+            }
+        }
+
+        async function viewProject(projectId) {
+            try {
+                const response = await fetch(`/api/projects/${projectId}`);
+                const data = await response.json();
+                
+                document.getElementById('modalTitle').textContent = data.metadata.name;
+                document.getElementById('modalContent').innerHTML = `
+                    <div class="space-y-6">
+                        <div>
+                            <h4 class="text-xl font-semibold mb-2">Overview</h4>
+                            <p class="whitespace-pre-wrap">${data.analyses.overview}</p>
+                        </div>
+                        <div>
+                            <h4 class="text-xl font-semibold mb-2">Technical Analysis</h4>
+                            <p class="whitespace-pre-wrap">${data.analyses.technical_analysis}</p>
+                        </div>
+                        <div>
+                            <h4 class="text-xl font-semibold mb-2">Actionable Insights</h4>
+                            <p class="whitespace-pre-wrap">${data.analyses.actionable_insights}</p>
+                        </div>
+                        <div>
+                            <h4 class="text-xl font-semibold mb-2">Dependency Analysis</h4>
+                            <p class="whitespace-pre-wrap">${data.analyses.dependency_analysis}</p>
+                        </div>
+                        <div>
+                            <h4 class="text-xl font-semibold mb-2">Code Quality Review</h4>
+                            <p class="whitespace-pre-wrap">${data.analyses.code_quality}</p>
+                        </div>
+                        <div>
+                            <h4 class="text-xl font-semibold mb-2">Security Review</h4>
+                            <p class="whitespace-pre-wrap">${data.analyses.security_review}</p>
+                        </div>
+                    </div>
+                `;
+                
+                document.getElementById('projectModal').classList.remove('hidden');
+            } catch (error) {
+                console.error('Error viewing project:', error);
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('projectModal').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
